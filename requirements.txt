@@ -1,0 +1,10 @@
+streamlit
+langchain
+langchain-google-vertexai
+pypdf
+faiss-cpu # Hoặc faiss-gpu nếu có GPU
+google-cloud-aiplatform
+langchain-community
+pandas
+scikit-learn
+matplotlib
