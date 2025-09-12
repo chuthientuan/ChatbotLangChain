@@ -6,12 +6,13 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 
 # --- Thư viện mới & cập nhật cho Phân tích Dữ liệu ---
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statsmodels.api as sm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import SGDRegressor  # Sử dụng Gradient Descent
@@ -134,46 +135,65 @@ def main():
             sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f", ax=ax_corr, annot_kws={"size": 8})
             st.pyplot(fig_corr)
 
-            # --- 3. HỒI QUY ĐA BIẾN DỰ ĐOÁN 'CHARGES' BẰNG GRADIENT DESCENT ---
-            st.subheader("3. Hồi quy đa biến dự đoán 'charges' bằng Gradient Descent")
+            # --- 3. HỒI QUY ĐA BIẾN VÀ TÓM TẮT MÔ HÌNH ---
+            st.subheader("3. Hồi quy đa biến dự đoán 'charges'")
             if 'charges' not in df_processed.columns:
                 st.warning("Vui lòng upload file CSV có chứa cột 'charges' để thực hiện hồi quy.")
             else:
                 if st.button("Thực hiện Hồi quy để dự đoán 'charges'"):
                     with st.spinner("Đang xử lý và huấn luyện mô hình..."):
-                        # Sử dụng df_processed đã được mã hóa từ trước
+                        # --- Phần code Scikit-learn để dự đoán (giữ nguyên) ---
                         X = df_processed.drop('charges', axis=1)
                         y = df_processed['charges']
-
-                        # Tách tập train/test
                         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-                        # Chuẩn hóa dữ liệu
                         scaler = StandardScaler()
                         X_train_scaled = scaler.fit_transform(X_train)
                         X_test_scaled = scaler.transform(X_test)
-
-                        # Huấn luyện mô hình SGDRegressor
                         sgd_model = SGDRegressor(max_iter=1000, tol=1e-3, random_state=42)
                         sgd_model.fit(X_train_scaled, y_train)
-
-                        # Đánh giá mô hình
                         y_pred = sgd_model.predict(X_test_scaled)
                         r2 = r2_score(y_test, y_pred)
                         rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
                         st.success("Huấn luyện mô hình thành công!")
 
-                        # Hiển thị kết quả
-                        st.write("**Kết quả đánh giá trên tập kiểm tra (Test set):**")
+                        # Hiển thị kết quả của Scikit-learn (Mô hình dự đoán)
+                        st.write("**Kết quả từ mô hình dự đoán (Scikit-learn - Gradient Descent):**")
                         col1, col2 = st.columns(2)
                         col1.metric("R-squared (R²)", f"{r2:.4f}")
                         col2.metric("Root Mean Squared Error (RMSE)", f"{rmse:,.2f}")
 
-                        st.write("**Hệ số hồi quy (Coefficients):**")
-                        coeffs = pd.DataFrame(sgd_model.coef_, index=X.columns, columns=['Coefficient'])
-                        st.dataframe(coeffs.sort_values('Coefficient', ascending=False))
-                        st.write(f"**Hệ số chặn (Intercept):** `{sgd_model.intercept_[0]:,.2f}`")
+                        # <<< THAY ĐỔI: Gộp và hiển thị các tham số Theta >>>
+                        st.write("**Các tham số Theta (θ) tìm được từ Gradient Descent:**")
+                        st.write("Đây là các hệ số tối ưu cho mô hình của bạn. Trong đó, Intercept chính là θ₀.")
+
+                        # Lấy các giá trị Theta
+                        intercept_theta = sgd_model.intercept_[0]
+                        coeffs_theta = sgd_model.coef_
+
+                        # Tạo DataFrame để hiển thị
+                        theta_index = ['Intercept (θ₀)'] + list(X.columns)
+                        theta_values = [intercept_theta] + list(coeffs_theta)
+                        theta_df = pd.DataFrame({'Giá trị Theta (θ)': theta_values}, index=theta_index)
+
+                        st.dataframe(theta_df)
+
+                        # --- Phần code Statsmodels để có Model Summary (MỚI) ---
+                        # Thêm cột hệ số chặn cho statsmodels
+                        X_sm = sm.add_constant(X)
+
+                        # <<< THAY ĐỔI QUAN TRỌNG: Ép kiểu toàn bộ dữ liệu sang kiểu số >>>
+                        X_sm = X_sm.astype(int)
+
+                        # Chạy mô hình OLS
+                        model_sm = sm.OLS(y, X_sm).fit()
+
+                        # Hiển thị Model Summary
+                        st.write("**Tóm tắt mô hình thống kê (Statsmodels - OLS):**")
+                        st.write(
+                            "Bảng này cung cấp các chi tiết thống kê về mô hình, như P-value để đánh giá ý nghĩa của từng biến.")
+                        # Chuyển bảng tóm tắt thành dạng text để hiển thị trong Streamlit
+                        st.text(str(model_sm.summary()))
 
 
 if __name__ == "__main__":
